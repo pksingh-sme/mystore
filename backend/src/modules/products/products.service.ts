@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { Repository, Like, In } from 'typeorm';
 import { Product } from '../../entities/product.entity';
 import { ProductImage } from '../../entities/product-image.entity';
 import { Category } from '../../entities/category.entity';
+import { VectorService } from '../vector/vector.service';
 
 @Injectable()
 export class ProductsService {
@@ -14,6 +15,7 @@ export class ProductsService {
     private productImagesRepository: Repository<ProductImage>,
     @InjectRepository(Category)
     private categoriesRepository: Repository<Category>,
+    private vectorService: VectorService,
   ) {}
 
   async findAll(
@@ -71,9 +73,25 @@ export class ProductsService {
     });
   }
 
+  async findByIds(ids: number[]): Promise<Product[]> {
+    return await this.productsRepository.find({
+      where: { id: In(ids) },
+      relations: ['images', 'category'],
+    });
+  }
+
   async create(createProductDto: Partial<Product>): Promise<Product> {
     const product = this.productsRepository.create(createProductDto);
-    return await this.productsRepository.save(product);
+    const savedProduct = await this.productsRepository.save(product);
+    
+    // Index the product in the vector database
+    try {
+      await this.vectorService.indexProduct(savedProduct);
+    } catch (error) {
+      console.error('Failed to index product:', error);
+    }
+    
+    return savedProduct;
   }
 
   async update(
@@ -81,7 +99,18 @@ export class ProductsService {
     updateProductDto: Partial<Product>,
   ): Promise<Product | null> {
     await this.productsRepository.update(id, updateProductDto);
-    return await this.productsRepository.findOne({ where: { id } });
+    const updatedProduct = await this.productsRepository.findOne({ where: { id } });
+    
+    // Re-index the product in the vector database
+    if (updatedProduct) {
+      try {
+        await this.vectorService.indexProduct(updatedProduct);
+      } catch (error) {
+        console.error('Failed to re-index product:', error);
+      }
+    }
+    
+    return updatedProduct;
   }
 
   async remove(id: number): Promise<void> {

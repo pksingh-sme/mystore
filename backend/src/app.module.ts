@@ -11,6 +11,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { StaticPagesModule } from './modules/static-pages/static-pages.module';
 import { CartModule } from './modules/cart/cart.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { VectorModule } from './modules/vector/vector.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AdminModule } from './modules/admin/admin.module';
     StaticPagesModule,
     CartModule,
     AdminModule,
+    VectorModule,
   ],
   controllers: [AppController],
   providers: [AppService],

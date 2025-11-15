@@ -5,9 +5,13 @@ import { ProductImage } from '../../entities/product-image.entity';
 import { Category } from '../../entities/category.entity';
 import { ProductsService } from './products.service';
 import { ProductsController } from './products.controller';
+import { VectorModule } from '../vector/vector.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Product, ProductImage, Category])],
+  imports: [
+    TypeOrmModule.forFeature([Product, ProductImage, Category]),
+    VectorModule,
+  ],
   controllers: [ProductsController],
   providers: [ProductsService],
   exports: [ProductsService],

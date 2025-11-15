@@ -3,10 +3,14 @@ import { ProductsService } from './products.service';
 import { Product } from '../../entities/product.entity';
 import { Category } from '../../entities/category.entity';
 import { AuthGuard } from '@nestjs/passport';
+import { VectorService } from '../vector/vector.service';
 
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly vectorService: VectorService,
+  ) {}
 
   @Get()
   async findAll(
@@ -36,6 +40,77 @@ export class ProductsController {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  @Get('semantic-search')
+  async semanticSearch(
+    @Query('query') query: string,
+    @Query('limit') limit: number = 10,
+  ) {
+    try {
+      if (!query) {
+        return { error: 'Query parameter is required' };
+      }
+      
+      const results = await this.vectorService.searchProducts(query, limit);
+      
+      // Extract product IDs from the results
+      const productIds = results.map(result => result.metadata.productId);
+      
+      // Fetch full product details
+      const products = await this.productsService.findByIds(productIds);
+      
+      // Map products to include similarity scores
+      const productsWithScores = products.map(product => {
+        const match = results.find(r => r.metadata.productId === product.id);
+        return {
+          ...product,
+          similarityScore: match?.score || 0,
+        };
+      });
+      
+      return {
+        data: productsWithScores,
+        total: productsWithScores.length,
+      };
+    } catch (error) {
+      return { error: 'Failed to perform semantic search', details: error.message };
+    }
+  }
+
+  @Get('suggestions/:id')
+  async getProductSuggestions(
+    @Param('id') id: string,
+    @Query('limit') limit: number = 5,
+  ) {
+    try {
+      const suggestions = await this.vectorService.getProductSuggestions(
+        parseInt(id),
+        limit,
+      );
+      
+      // Extract product IDs from the results
+      const productIds = suggestions.map(suggestion => suggestion.metadata.productId);
+      
+      // Fetch full product details
+      const products = await this.productsService.findByIds(productIds);
+      
+      // Map products to include similarity scores
+      const productsWithScores = products.map(product => {
+        const match = suggestions.find(s => s.metadata.productId === product.id);
+        return {
+          ...product,
+          similarityScore: match?.score || 0,
+        };
+      });
+      
+      return {
+        data: productsWithScores,
+        total: productsWithScores.length,
+      };
+    } catch (error) {
+      return { error: 'Failed to get product suggestions', details: error.message };
+    }
   }
 
   @Get(':id')
