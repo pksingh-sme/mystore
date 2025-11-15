@@ -1,0 +1,77 @@
+{
+  "family": "ecommerce-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "${ecs_execution_role_arn}",
+  "taskRoleArn": "${ecs_task_role_arn}",
+  "containerDefinitions": [
+    {
+      "name": "ecommerce-backend",
+      "image": "${backend_image_url}",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DB_HOST",
+          "value": "${db_host}"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_USERNAME",
+          "value": "${db_username}"
+        },
+        {
+          "name": "DB_NAME",
+          "value": "ecommerce"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "${jwt_secret}"
+        },
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "value": "${google_client_id}"
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "value": "${google_client_secret}"
+        },
+        {
+          "name": "GOOGLE_CALLBACK_URL",
+          "value": "${google_callback_url}"
+        },
+        {
+          "name": "FRONTEND_URL",
+          "value": "${frontend_url}"
+        },
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "${db_password_arn}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ecommerce-backend",
+          "awslogs-region": "${aws_region}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

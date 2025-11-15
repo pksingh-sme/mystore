@@ -1,0 +1,129 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # CI Pipeline - Build and Test
+  ci:
+    name: CI - Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: |
+          backend/package-lock.json
+          frontend/package-lock.json
+
+    - name: Install backend dependencies
+      working-directory: backend
+      run: npm ci
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Run backend linting
+      working-directory: backend
+      run: npm run lint
+
+    - name: Run frontend linting
+      working-directory: frontend
+      run: npm run lint
+
+    - name: Run backend tests
+      working-directory: backend
+      run: npm run test
+
+    - name: Run frontend tests
+      working-directory: frontend
+      run: npm run test
+
+    - name: Build backend
+      working-directory: backend
+      run: npm run build
+
+    - name: Build frontend
+      working-directory: frontend
+      run: npm run build
+
+  # CD Pipeline - Deploy to AWS (only on main branch)
+  cd:
+    name: CD - Deploy to AWS
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: |
+          backend/package-lock.json
+          frontend/package-lock.json
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push backend image to Amazon ECR
+      working-directory: backend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ecommerce-backend
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Build, tag, and push frontend image to Amazon ECR
+      working-directory: frontend
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ecommerce-frontend
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Deploy backend to ECS
+      working-directory: aws-deployment
+      run: |
+        # Update ECS service with new task definition
+        aws ecs update-service \
+          --cluster ecommerce-cluster \
+          --service ecommerce-backend-service \
+          --force-new-deployment
+
+    - name: Deploy frontend to S3
+      working-directory: frontend
+      run: |
+        # Sync build files to S3
+        aws s3 sync dist/ s3://${{ secrets.FRONTEND_BUCKET_NAME }} --delete
+        
+        # Invalidate CloudFront cache
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
