@@ -1,41 +1,43 @@
-import { AppDataSource } from '../../data-source';
-import { User, UserRole } from '../entities/user.entity';
-import { Category } from '../entities/category.entity';
-import { Product } from '../entities/product.entity';
-import { StaticPage } from '../entities/static-page.entity';
+import * as dotenv from 'dotenv';
+dotenv.config();
+
+import { Client } from 'pg';
 import * as bcrypt from 'bcryptjs';
 
 async function seedDatabase() {
+  const client = new Client({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || 'postgres',
+    database: process.env.DB_NAME || 'ecommerce',
+  });
+
   try {
-    await AppDataSource.initialize();
+    await client.connect();
     console.log('Database connection established');
 
     // Clear existing data
-    await AppDataSource.getRepository(StaticPage).clear();
-    await AppDataSource.getRepository(Product).clear();
-    await AppDataSource.getRepository(Category).clear();
-    await AppDataSource.getRepository(User).clear();
+    await client.query('DELETE FROM static_page');
+    await client.query('DELETE FROM product');
+    await client.query('DELETE FROM category');
+    await client.query('DELETE FROM "user"');
 
     // Create admin user
-    const adminUser = new User();
-    adminUser.firstName = 'Admin';
-    adminUser.lastName = 'User';
-    adminUser.email = 'admin@example.com';
-    adminUser.password = await bcrypt.hash('admin123', 10);
-    adminUser.role = UserRole.ADMIN;
-    adminUser.isEmailVerified = true;
-    await AppDataSource.getRepository(User).save(adminUser);
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    const adminResult = await client.query(
+      'INSERT INTO "user" ("firstName", "lastName", "email", "password", "role", "isEmailVerified", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING id',
+      ['Admin', 'User', 'admin@example.com', adminPassword, 'admin', true]
+    );
+    const adminId = adminResult.rows[0].id;
     console.log('Admin user created');
 
     // Create regular user
-    const regularUser = new User();
-    regularUser.firstName = 'John';
-    regularUser.lastName = 'Doe';
-    regularUser.email = 'john.doe@example.com';
-    regularUser.password = await bcrypt.hash('user123', 10);
-    regularUser.role = UserRole.USER;
-    regularUser.isEmailVerified = true;
-    await AppDataSource.getRepository(User).save(regularUser);
+    const userPassword = await bcrypt.hash('user123', 10);
+    await client.query(
+      'INSERT INTO "user" ("firstName", "lastName", "email", "password", "role", "isEmailVerified", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())',
+      ['John', 'Doe', 'john.doe@example.com', userPassword, 'user', true]
+    );
     console.log('Regular user created');
 
     // Create categories
@@ -49,16 +51,13 @@ async function seedDatabase() {
       },
     ];
 
-    const categoryEntities = [];
+    const categoryIds = [];
     for (const cat of categories) {
-      const category = new Category();
-      category.name = cat.name;
-      category.description = cat.description;
-      category.isActive = true;
-      const savedCategory = await AppDataSource.getRepository(Category).save(
-        category,
+      const result = await client.query(
+        'INSERT INTO "category" ("name", "description", "isActive", "createdAt", "updatedAt") VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',
+        [cat.name, cat.description, true]
       );
-      categoryEntities.push(savedCategory);
+      categoryIds.push(result.rows[0].id);
       console.log(`Category "${cat.name}" created`);
     }
 
@@ -69,47 +68,40 @@ async function seedDatabase() {
         description: 'Latest model smartphone with advanced features',
         price: 699.99,
         stock: 50,
-        categoryId: categoryEntities[0].id,
-        userId: adminUser.id,
+        categoryId: categoryIds[0],
+        userId: adminId,
       },
       {
         name: 'Laptop',
         description: 'High-performance laptop for work and gaming',
         price: 1299.99,
         stock: 25,
-        categoryId: categoryEntities[0].id,
-        userId: adminUser.id,
+        categoryId: categoryIds[0],
+        userId: adminId,
       },
       {
         name: 'T-Shirt',
         description: 'Comfortable cotton t-shirt',
         price: 19.99,
         stock: 100,
-        categoryId: categoryEntities[1].id,
-        userId: adminUser.id,
+        categoryId: categoryIds[1],
+        userId: adminId,
       },
       {
         name: 'JavaScript Guide',
         description: 'Comprehensive guide to JavaScript programming',
         price: 39.99,
         stock: 75,
-        categoryId: categoryEntities[2].id,
-        userId: adminUser.id,
+        categoryId: categoryIds[2],
+        userId: adminId,
       },
     ];
 
     for (const prod of products) {
-      const product = new Product();
-      product.name = prod.name;
-      product.description = prod.description;
-      product.price = prod.price;
-      product.stock = prod.stock;
-      product.isActive = true;
-      product.category =
-        categoryEntities.find((c) => c.id === prod.categoryId) ||
-        categoryEntities[0];
-      product.user = adminUser;
-      await AppDataSource.getRepository(Product).save(product);
+      await client.query(
+        'INSERT INTO "product" ("name", "description", "price", "stock", "isActive", "userId", "categoryId", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())',
+        [prod.name, prod.description, prod.price, prod.stock, true, prod.userId, prod.categoryId]
+      );
       console.log(`Product "${prod.name}" created`);
     }
 
@@ -135,18 +127,19 @@ async function seedDatabase() {
     ];
 
     for (const page of staticPages) {
-      const staticPage = new StaticPage();
-      staticPage.slug = page.slug;
-      staticPage.title = page.title;
-      staticPage.htmlContent = page.htmlContent;
-      await AppDataSource.getRepository(StaticPage).save(staticPage);
+      await client.query(
+        'INSERT INTO "static_page" ("slug", "title", "htmlContent", "createdAt", "updatedAt") VALUES ($1, $2, $3, NOW(), NOW())',
+        [page.slug, page.title, page.htmlContent]
+      );
       console.log(`Static page "${page.title}" created`);
     }
 
     console.log('Database seeding completed successfully!');
+    await client.end();
     process.exit(0);
   } catch (error) {
     console.error('Error seeding database:', error);
+    await client.end();
     process.exit(1);
   }
 }

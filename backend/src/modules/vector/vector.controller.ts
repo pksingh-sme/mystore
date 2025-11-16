@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Query, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, UseGuards, Logger } from '@nestjs/common';
 import { VectorService } from './vector.service';
 import { AuthGuard } from '@nestjs/passport';
 
 @Controller('vector')
 export class VectorController {
+  private readonly logger = new Logger(VectorController.name);
+  
   constructor(private readonly vectorService: VectorService) {}
 
   /**
@@ -16,6 +18,7 @@ export class VectorController {
       await this.vectorService.indexAllProducts();
       return { message: 'All products indexed successfully' };
     } catch (error) {
+      this.logger.error('Failed to index products:', error);
       return { error: 'Failed to index products', details: error.message };
     }
   }
@@ -30,6 +33,7 @@ export class VectorController {
       // This would need to be implemented to fetch and index a single product
       return { message: `Product ${id} indexing initiated` };
     } catch (error) {
+      this.logger.error('Failed to index product:', error);
       return { error: 'Failed to index product', details: error.message };
     }
   }
@@ -48,8 +52,9 @@ export class VectorController {
       }
       
       const results = await this.vectorService.searchProducts(query, limit);
-      return { results };
+      return { data: results };
     } catch (error) {
+      this.logger.error('Failed to search products:', error);
       return { error: 'Failed to search products', details: error.message };
     }
   }
@@ -67,8 +72,9 @@ export class VectorController {
         parseInt(productId),
         limit,
       );
-      return { suggestions };
+      return { data: suggestions };
     } catch (error) {
+      this.logger.error('Failed to get product suggestions:', error);
       return { error: 'Failed to get product suggestions', details: error.message };
     }
   }

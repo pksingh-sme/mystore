@@ -22,7 +22,8 @@
     "migration:run": "ts-node src/scripts/run-migrations.ts",
     "seed": "ts-node src/scripts/seed-data.ts",
     "init:db": "ts-node src/scripts/init-database.ts",
-    "index:products": "ts-node src/scripts/index-products.ts"
+    "index:products": "ts-node src/scripts/index-products.ts",
+    "add:products": "ts-node src/scripts/add-more-products.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
